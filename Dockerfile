@@ -1,33 +1,34 @@
-# Multi-stage Dockerfile for NetflixClone-app
-
-# -- Build stage -----------------------------------------------------------
-FROM node:20-alpine AS builder
+# --- Build Stage ---
+FROM node:18-alpine AS build
 WORKDIR /app
-
-# Allow build-time injection of the Gemini API key (used at build time by Vite)
-ARG NODE_ENV=production
-ARG GEMINI_API_KEY
-ENV NODE_ENV=${NODE_ENV}
-ENV GEMINI_API_KEY=${GEMINI_API_KEY}
-
-# Install dependencies (use package-lock for deterministic installs)
-COPY package.json package-lock.json ./
-# Ensure dev dependencies (like Vite) are installed for the build step
-RUN npm ci --silent --include=dev
-
-# Copy source and build
+COPY package*.json ./
+RUN npm ci
 COPY . .
 RUN npm run build
 
-# -- Runtime stage (nginx) -----------------------------------------------
-FROM nginx:stable-alpine AS runner
+# --- Runtime Stage ---
+FROM nginx:alpine-slim
 
-# Copy built app to nginx html folder
-COPY --from=builder /app/dist /usr/share/nginx/html
+# Copy build artifacts
+WORKDIR /usr/share/nginx/html
+COPY --from=build /app/dist .
 
-# Add nginx configuration for SPA routing
+# Copy your custom config (Ensure it has "listen 8080;")
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 
+# 1. Fix permissions for the directories Nginx needs to touch.
+# 2. We grant permissions to GID 0 (root group) because that's what OpenShift uses.
+RUN chmod -R 775 /var/cache/nginx /var/run /var/log/nginx /usr/share/nginx/html && \
+    chgrp -R 0 /var/cache/nginx /var/run /var/log/nginx /usr/share/nginx/html
+
+# 3. Wipe the default 'user' directive from the main nginx.conf 
+# This stops the "user directive makes sense only if master runs with super-user" warning.
+RUN sed -i 's/^user/#user/' /etc/nginx/nginx.conf
+
+# OpenShift runs as a random UID
+USER 1001
+
+# Non-privileged port
 EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]

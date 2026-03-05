@@ -1,0 +1,34 @@
+apiversion: networking.k8s.io/v1
+kind: NetworkPolicy
+matadata:
+  name: nginx-networking
+  namespace: nginx-a 
+spec:
+  podSelector:
+    matchLabel:
+      app: nginx
+
+
+  policyType:
+   - Ingress
+   - Egress
+  ingree:
+    - from:
+       - namespaceSelector:
+           matchlabels:
+             name: nginx-b 
+
+       - podSelector:
+           matchLabel:
+             name: nginx 
+
+
+  Egree:
+    - to :
+      - namespaceSelector:
+          matchLabel:
+             name: nginx-a 
+      - podSelector:
+          matchlabels:
+             name: nginx 
+             
